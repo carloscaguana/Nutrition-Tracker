@@ -1,4 +1,13 @@
 {
+  "name": "nutrition-tracker",
+  "private": true,
+  "scripts": {
+    "start":"npm run dev -w nutrition-tracker-frontend",
+    "dev": "npm run dev -w nutrition-tracker-frontend"
+  },
+  "workspaces":[
+    "nutrition-tracker-frontend"
+  ],
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1"
   }

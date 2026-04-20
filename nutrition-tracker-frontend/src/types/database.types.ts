@@ -214,21 +214,24 @@ export type Database = {
           meal_id: number
           mealitem_id: number
           quantity: number
-          unit_id: number
+          quantity_grams: number
+          unit_id: number | null
         }
         Insert: {
           food_id: number
           meal_id: number
           mealitem_id?: number
-          quantity: number
-          unit_id: number
+          quantity?: number
+          quantity_grams: number
+          unit_id?: number | null
         }
         Update: {
           food_id?: number
           meal_id?: number
           mealitem_id?: number
           quantity?: number
-          unit_id?: number
+          quantity_grams?: number
+          unit_id?: number | null
         }
         Relationships: [
           {
@@ -288,17 +291,14 @@ export type Database = {
       }
       serving_units: {
         Row: {
-          grams_equivalent: number | null
           unit_id: number
           unit_name: string
         }
         Insert: {
-          grams_equivalent?: number | null
           unit_id: number
           unit_name: string
         }
         Update: {
-          grams_equivalent?: number | null
           unit_id?: number
           unit_name?: string
         }

@@ -17,10 +17,12 @@ export const getMeals = async () => {
 }
 
 // mirrors INSERT statement policy
-export const insertMeal = async (meal: MealInsert) => {
+export const insertMeal = async (meal: MealInsert): Promise<Meal> => {
   const { data, error } = await supabase
     .from('meals')
     .insert(meal)
+    .select()
+    .single()
 
   if (error) throw error
   return data
@@ -57,6 +59,31 @@ export const getMealById = async (mealId:number): Promise<Meal | null> => {
     .eq('meal_id', mealId)
     .single()
   
+  if (error) throw error
+  return data
+}
+
+// Get today's meals joined with their items, foods, and serving units
+export const getTodaysMealsWithItems = async () => {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date()
+  end.setHours(23, 59, 59, 999)
+
+  const { data, error } = await supabase
+    .from('meals')
+    .select(`
+      *,
+      meal_items (
+        *,
+        foods (*),
+        serving_units (*)
+      )
+    `)
+    .gte('time_consumed_at', start.toISOString())
+    .lte('time_consumed_at', end.toISOString())
+    .order('time_consumed_at', { ascending: true })
+
   if (error) throw error
   return data
 }
