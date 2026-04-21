@@ -221,7 +221,7 @@ export type Database = {
           food_id: number
           meal_id: number
           mealitem_id?: number
-          quantity?: number
+          quantity?: number //? means that it is optional
           quantity_grams: number
           unit_id?: number | null
         }
@@ -299,6 +299,7 @@ export type Database = {
           unit_name: string
         }
         Update: {
+
           unit_id?: number
           unit_name?: string
         }
