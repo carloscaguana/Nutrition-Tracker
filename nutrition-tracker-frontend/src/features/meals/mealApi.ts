@@ -63,6 +63,25 @@ export const getMealById = async (mealId:number): Promise<Meal | null> => {
   return data
 }
 
+//Get a single meal with its items, foods, and serving units
+export const getMealWithItems = async (mealId: number) => {
+  const { data, error } = await supabase
+    .from('meals')
+    .select(`
+      *,
+      meal_items (
+        *,
+        foods (*),
+        serving_units (*)
+      )
+    `)
+    .eq('meal_id', mealId)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 // Get today's meals joined with their items, foods, and serving units
 export const getTodaysMealsWithItems = async () => {
   const start = new Date()

@@ -42,13 +42,22 @@ export const updateMealItem = async (mealItemId: number, item: MealItemUpdate) =
   return data
 }
 
-// mirrors DELETE statement policy
+// Deletes a single meal item from a meal
 export const deleteMealItem = async (mealItemId: number) => {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('meal_items')
     .delete()
     .eq('mealitem_id', mealItemId)
 
   if (error) throw error
-  return data
+}
+
+//Deletes an entire meal and the food items within it
+export const deleteAllMealItems = async (mealId: number) => {
+  const { error } = await supabase
+    .from('meal_items')
+    .delete()
+    .eq('meal_id', mealId)
+
+  if (error) throw error
 }
