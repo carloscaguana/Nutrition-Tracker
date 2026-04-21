@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { useAuth } from "@/hooks/useAuth";
 import Navbar from "@/components/Navbar";
-import { getTodaysMealsWithItems } from "@/features/meals/mealApi";
+import { getTodaysMealsWithItems, deleteMeal } from "@/features/meals/mealApi";
+import { deleteAllMealItems } from "@/features/mealItems/mealItemApi";
 import { getActiveGoal } from "@/features/goals/goalApi";
 import { getWeightLogs } from "@/features/weightLogs/weightLogApi";
 import { Database } from "@/types/database.types";
@@ -123,6 +124,17 @@ function Dashboard({ user }: { user: User }) {
     snack: "Snack", drink: "Drink", other: "Other",
   };
 
+  async function handleDeleteMeal(mealId: number) {
+    if (!window.confirm("Delete this meal and all its items?")) return;
+    try {
+      await deleteAllMealItems(mealId);
+      await deleteMeal(mealId);
+      setMeals((prev) => prev.filter((m) => m.meal_id !== mealId));
+    } catch (err) {
+      console.error("Delete meal error:", err);
+    }
+  }
+
   const todayLabel = new Date().toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric",
   });
@@ -145,7 +157,7 @@ function Dashboard({ user }: { user: User }) {
           <h1 className="text-3xl font-bold tracking-tight">{getGreeting(user)}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             {totals.kcal > 0
-              ? `You've logged ${totals.kcal} kcal so far today.`
+              ? `You've consumed ${totals.kcal} calories so far today.`
               : "You haven't logged any meals yet today."}
           </p>
         </div>
@@ -224,7 +236,27 @@ function Dashboard({ user }: { user: User }) {
                     <span className="rounded-lg bg-[var(--brand-light)] px-2.5 py-0.5 text-xs font-semibold text-[var(--brand)]">
                       {mealTypeLabel[meal.meal_type ?? "other"]}
                     </span>
-                    <span className="text-sm font-semibold text-[var(--muted)]">{mealKcal(meal)} kcal</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[var(--muted)]">{mealKcal(meal)} kcal</span>
+                      <Link
+                        href={`/meals/${meal.meal_id}/edit`}
+                        className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+                        aria-label="Edit meal"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </Link>
+                      <button
+                        onClick={() => handleDeleteMeal(meal.meal_id)}
+                        className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-red-500"
+                        aria-label="Delete meal"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   {meal.meal_items.length === 0 ? (
                     <p className="text-xs text-[var(--muted)]">No items added.</p>
