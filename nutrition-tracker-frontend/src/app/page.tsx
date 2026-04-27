@@ -38,7 +38,6 @@ function computeItemKcal(item: MealItem): number {
 
 function computeItemMacro(item: MealItem, field: keyof FoodRow): number {
   const food = item.foods;
-  const unit = item.serving_units;
   if (!food || food[field] == null) return 0;
   return (item.quantity_grams / 100) * (food[field] as number);
 }
@@ -80,7 +79,7 @@ function getGreeting(user: User): string {
 
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
-const HISTORY_PREVIEW_LIMIT = 5;
+const HISTORY_PREVIEW_LIMIT = 10;
 
 function Dashboard({ user }: { user: User }) {
   const [meals, setMeals] = useState<MealWithItems[]>([]);
@@ -95,8 +94,8 @@ function Dashboard({ user }: { user: User }) {
       try {
         const [mealsData, weightData, pastData] = await Promise.all([
           getTodaysMealsWithItems(),
-          getWeightLogs(),
-          getPastMealsWithItems(HISTORY_PREVIEW_LIMIT + 1), //fetch one extra to see if "See all" is needed
+          getWeightLogs(user.id),
+          getPastMealsWithItems(HISTORY_PREVIEW_LIMIT + 1), // fetch one extra to know if "See all" is needed
         ]);
         setMeals((mealsData as MealWithItems[]) ?? []);
         setLatestWeight(weightData?.[0] ?? null);
@@ -133,7 +132,6 @@ function Dashboard({ user }: { user: User }) {
     snack: "Snack", drink: "Drink", other: "Other",
   };
 
-  // Used for 'delete' option for meals generated today
   async function handleDeleteMeal(mealId: number) {
     if (!window.confirm("Delete this meal and all its items?")) return;
     try {
@@ -145,15 +143,14 @@ function Dashboard({ user }: { user: User }) {
     }
   }
 
-  // Used for 'delete' option for meals generated
   async function handleDeletePastMeal(mealId: number) {
     if (!window.confirm("Delete this meal and all its items?")) return;
-    try{
+    try {
       await deleteAllMealItems(mealId);
       await deleteMeal(mealId);
       setPastMeals((prev) => prev.filter((m) => m.meal_id !== mealId));
     } catch (err) {
-      console.error("Delete meal error:", err)
+      console.error("Delete meal error:", err);
     }
   }
 
@@ -179,7 +176,7 @@ function Dashboard({ user }: { user: User }) {
           <h1 className="text-3xl font-bold tracking-tight">{getGreeting(user)}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             {totals.kcal > 0
-              ? `You've consumed ${totals.kcal} calories so far today.`
+              ? `You've logged ${totals.kcal} kcal so far today.`
               : "You haven't logged any meals yet today."}
           </p>
         </div>
@@ -414,17 +411,41 @@ function Dashboard({ user }: { user: User }) {
               <p className="text-sm text-[var(--muted)]">No entries yet</p>
             )}
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <p className="mb-1 text-xs text-[var(--muted)]">Active goal</p>
+          <Link
+            href="/goals"
+            className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--brand)]/50"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs text-[var(--muted)]">Active goal</p>
+              <svg className="h-3.5 w-3.5 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
             {goal ? (
               <>
                 <p className="text-2xl font-bold capitalize">{goal.goal_type ?? "Custom"}</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">Target: {goal.calorie_target} kcal/day</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{goal.calorie_target} kcal / day</p>
+                {(goal.protein_target || goal.carb_target || goal.fat_target) && (
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                    {goal.protein_target && (
+                      <span className="text-xs text-[var(--muted)]">P: {goal.protein_target}g</span>
+                    )}
+                    {goal.carb_target && (
+                      <span className="text-xs text-[var(--muted)]">C: {goal.carb_target}g</span>
+                    )}
+                    {goal.fat_target && (
+                      <span className="text-xs text-[var(--muted)]">F: {goal.fat_target}g</span>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
-              <p className="text-sm text-[var(--muted)]">No active goal</p>
+              <>
+                <p className="text-sm text-[var(--muted)]">No active goal</p>
+                <p className="mt-1 text-xs text-[var(--brand)]">+ Set a goal</p>
+              </>
             )}
-          </div>
+          </Link>
         </div>
 
       </main>
