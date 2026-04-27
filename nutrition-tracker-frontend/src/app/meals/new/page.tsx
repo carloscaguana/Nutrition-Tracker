@@ -27,7 +27,7 @@ type SelectedItem = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function calcKcal(food: FoodRow, grams: number): number {
-  return Math.round((grams / 100) * food.kcal_val);
+  return Math.round((grams / 100) * food.kcal_val); //formula for calculating total cals based off of grams given by user
 }
 
 function localDatetimeNow(): string {
