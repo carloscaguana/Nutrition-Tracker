@@ -16,7 +16,7 @@ export const getMeals = async () => {
   return data
 }
 
-// mirrors INSERT statement policy
+// mirrors INSERT statement policy - returns the created row (including meal_id)
 export const insertMeal = async (meal: MealInsert): Promise<Meal> => {
   const { data, error } = await supabase
     .from('meals')
@@ -51,6 +51,8 @@ export const deleteMeal = async (mealId: number) => {
   return data
 }
 
+//------------
+
 // SELECT * FROM meals WHERE meal_id='specific_meal_id'
 export const getMealById = async (mealId:number): Promise<Meal | null> => {
   const { data, error } = await supabase
@@ -61,6 +63,49 @@ export const getMealById = async (mealId:number): Promise<Meal | null> => {
   
   if (error) throw error
   return data
+}
+
+// Get recent meals with nested joins - used for history preview on dashboard
+export const getPastMealsWithItems = async (limit: number) => {
+  const { data, error } = await supabase
+    .from('meals')
+    .select(`
+      *,
+      meal_items (
+        *,
+        foods (*),
+        serving_units (*)
+      )
+    `)
+    .order('time_consumed_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data
+}
+
+const HISTORY_PAGE_SIZE = 20
+
+// Paginated full history — used for /meals/history page
+export const getAllPastMealsWithItems = async (page: number) => {
+  const from = page * HISTORY_PAGE_SIZE
+  const to = from + HISTORY_PAGE_SIZE - 1
+
+  const { data, error, count } = await supabase
+    .from('meals')
+    .select(`
+      *,
+      meal_items (
+        *,
+        foods (*),
+        serving_units (*)
+      )
+    `, { count: 'exact' })
+    .order('time_consumed_at', { ascending: false })
+    .range(from, to)
+
+  if (error) throw error
+  return { data: data ?? [], count: count ?? 0, pageSize: HISTORY_PAGE_SIZE }
 }
 
 //Get a single meal with its items, foods, and serving units
