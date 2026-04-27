@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { useAuth } from "@/hooks/useAuth";
 import Navbar from "@/components/Navbar";
-import { getTodaysMealsWithItems, deleteMeal } from "@/features/meals/mealApi";
+import { getTodaysMealsWithItems, getPastMealsWithItems, deleteMeal } from "@/features/meals/mealApi";
 import { deleteAllMealItems } from "@/features/mealItems/mealItemApi";
 import { getActiveGoal } from "@/features/goals/goalApi";
 import { getWeightLogs } from "@/features/weightLogs/weightLogApi";
@@ -80,8 +80,12 @@ function getGreeting(user: User): string {
 
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
+const HISTORY_PREVIEW_LIMIT = 5;
+
 function Dashboard({ user }: { user: User }) {
   const [meals, setMeals] = useState<MealWithItems[]>([]);
+  const [pastMeals, setPastMeals] = useState<MealWithItems[]>([]);
+  const [pastMealTotal, setPastMealTotal] = useState(0);
   const [goal, setGoal] = useState<GoalRow | null>(null);
   const [latestWeight, setLatestWeight] = useState<WeightLogRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,12 +93,17 @@ function Dashboard({ user }: { user: User }) {
   useEffect(() => {
     async function load() {
       try {
-        const [mealsData, weightData] = await Promise.all([
+        const [mealsData, weightData, pastData] = await Promise.all([
           getTodaysMealsWithItems(),
           getWeightLogs(),
+          getPastMealsWithItems(HISTORY_PREVIEW_LIMIT + 1), //fetch one extra to see if "See all" is needed
         ]);
         setMeals((mealsData as MealWithItems[]) ?? []);
         setLatestWeight(weightData?.[0] ?? null);
+
+        const past = (pastData as MealWithItems[]) ?? [];
+        setPastMealTotal(past.length);
+        setPastMeals(past.slice(0, HISTORY_PREVIEW_LIMIT));
 
         // Goal fetch may fail if no active goal exists
         try {
@@ -124,6 +133,7 @@ function Dashboard({ user }: { user: User }) {
     snack: "Snack", drink: "Drink", other: "Other",
   };
 
+  // Used for 'delete' option for meals generated today
   async function handleDeleteMeal(mealId: number) {
     if (!window.confirm("Delete this meal and all its items?")) return;
     try {
@@ -132,6 +142,18 @@ function Dashboard({ user }: { user: User }) {
       setMeals((prev) => prev.filter((m) => m.meal_id !== mealId));
     } catch (err) {
       console.error("Delete meal error:", err);
+    }
+  }
+
+  // Used for 'delete' option for meals generated
+  async function handleDeletePastMeal(mealId: number) {
+    if (!window.confirm("Delete this meal and all its items?")) return;
+    try{
+      await deleteAllMealItems(mealId);
+      await deleteMeal(mealId);
+      setPastMeals((prev) => prev.filter((m) => m.meal_id !== mealId));
+    } catch (err) {
+      console.error("Delete meal error:", err)
     }
   }
 
@@ -276,6 +298,100 @@ function Dashboard({ user }: { user: User }) {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Meal history preview ───────────────────────────────────────── */}
+        <section className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--muted)]">Meal history</h2>
+            {pastMealTotal > HISTORY_PREVIEW_LIMIT && (
+              <Link
+                href="/meals/history"
+                className="flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--brand)] hover:text-[var(--brand)]"
+              >
+                See all
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            )}
+          </div>
+
+          {pastMeals.length === 0 ? (
+            <p className="py-2 text-sm text-[var(--muted)]">No past meals logged yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {pastMeals.map((meal, idx) => {
+                // Insert a date divider whenever the day changes
+                const mealDate = new Date(meal.time_consumed_at).toLocaleDateString("en-US", {
+                  weekday: "short", month: "short", day: "numeric",
+                });
+                const prevDate = idx > 0
+                  ? new Date(pastMeals[idx - 1].time_consumed_at).toLocaleDateString("en-US", {
+                      weekday: "short", month: "short", day: "numeric",
+                    })
+                  : null;
+                const showDateDivider = mealDate !== prevDate;
+
+                return (
+                  <div key={meal.meal_id}>
+                    {showDateDivider && (
+                      <p className="mb-2 mt-4 first:mt-0 text-xs font-semibold text-[var(--muted)]">{mealDate}</p>
+                    )}
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-[var(--brand-light)] px-2.5 py-0.5 text-xs font-semibold text-[var(--brand)]">
+                            {mealTypeLabel[meal.meal_type ?? "other"]}
+                          </span>
+                          <span className="text-xs text-[var(--muted)]">
+                            {new Date(meal.time_consumed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[var(--muted)]">{mealKcal(meal)} kcal</span>
+                          <Link
+                            href={`/meals/${meal.meal_id}/edit`}
+                            className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+                            aria-label="Edit meal"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Link>
+                          <button
+                            onClick={() => handleDeletePastMeal(meal.meal_id)}
+                            className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-red-500"
+                            aria-label="Delete meal"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      {meal.meal_items.length === 0 ? (
+                        <p className="text-xs text-[var(--muted)]">No items added.</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {meal.meal_items.map((item) => (
+                            <li key={item.mealitem_id} className="flex items-center justify-between text-sm">
+                              <span className="text-[var(--foreground)]">{item.foods?.food_name ?? "Unknown food"}</span>
+                              <span className="text-[var(--muted)]">
+                                {item.quantity_grams}g
+                                {item.serving_units ? ` · ${item.serving_units.unit_name}` : ""}
+                                {" · "}{Math.round(computeItemKcal(item))} kcal
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

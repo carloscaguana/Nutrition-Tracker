@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 
+//Used in the search bar when logging a meal, limited to 1st 20 foods that match user criteria
 export const searchFoods = async (query: string) => {
   const { data, error } = await supabase
     .from('foods')
@@ -11,12 +12,10 @@ export const searchFoods = async (query: string) => {
   return data
 }
 
-const PAGE_SIZE = 50
-
-// used to list all available foods in the dataset
-export const getAllFoods = async (page: number, query: string) => {
-  const from = page * PAGE_SIZE
-  const to = from + PAGE_SIZE - 1
+// used to list all available foods in the current dataset
+export const getAllFoods = async (page: number, query: string, pageSize: number) => {
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
 
   let req = supabase
     .from('foods')
@@ -30,5 +29,5 @@ export const getAllFoods = async (page: number, query: string) => {
 
   const { data, error, count } = await req
   if (error) throw error
-  return { data: data ?? [], count: count ?? 0, page_size: PAGE_SIZE}
+  return { data: data ?? [], count: count ?? 0}
 }

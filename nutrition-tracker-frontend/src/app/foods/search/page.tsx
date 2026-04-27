@@ -156,6 +156,29 @@ function FoodTableRow({ food }: { food: FoodRow }) {
   );
 }
 
+// ─── Pagination Helpers ───────────────────────────────────────────────────────
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 250, 500];
+
+/**
+ * Returns an array of page numbers (0-indexed) and `null` for ellipsis gaps.
+ * Always shows first, last, and up to 2 pages on either side of current.
+ */
+function getPageNumbers(current: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i);
+
+  const pages: (number | null)[] = [];
+  const addPage = (p: number) => { if (!pages.includes(p)) pages.push(p); };
+  const addEllipsis = () => { if (pages[pages.length - 1] !== null) pages.push(null); };
+
+  addPage(0);
+  if (current > 3) addEllipsis();
+  for (let i = Math.max(1, current - 2); i <= Math.min(total - 2, current + 2); i++) addPage(i);
+  if (current < total - 4) addEllipsis();
+  addPage(total - 1);
+
+  return pages;
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function FoodsPage() {
@@ -170,10 +193,9 @@ export default function FoodsPage() {
   const [loadingFoods, setLoadingFoods] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Track whether query changed (for debounce skip logic)
   const prevQuery = useRef(query);
 
-  // Reset to page 0 whenever the query changes
+  // Reset to page 0 on query or page size change
   useEffect(() => {
     if (prevQuery.current !== query) {
       prevQuery.current = query;
@@ -181,7 +203,8 @@ export default function FoodsPage() {
     }
   }, [query]);
 
-  // Redirect unauthenticated users
+  useEffect(() => { setPage(0); }, [pageSize]);
+  
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
@@ -196,11 +219,10 @@ export default function FoodsPage() {
 
     const timer = setTimeout(async () => {
       try {
-        const result = await getAllFoods(page, query);
+        const result = await getAllFoods(page, query, pageSize);
         if (!cancelled) {
           setFoods(result.data);
           setTotalCount(result.count);
-          setPageSize(result.pageSize);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -217,16 +239,15 @@ export default function FoodsPage() {
       }
     }, 300);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    return () => {cancelled = true; clearTimeout(timer); };
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, page, authLoading]);
+  }, [query, page, pageSize, authLoading]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
   const startEntry = totalCount === 0 ? 0 : page * pageSize + 1;
   const endEntry = Math.min((page + 1) * pageSize, totalCount);
+  const pageNumbers = getPageNumbers(page, totalPages);
 
   if (authLoading) {
     return (
@@ -251,36 +272,53 @@ export default function FoodsPage() {
           )}
         </div>
 
-        {/* Search */}
-        <div className="relative mb-6 max-w-md">
-          <svg
-            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-          </svg>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter by food name…"
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-10 pr-10 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none transition-colors focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-          />
-          {loadingFoods && (
-            <span className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--brand)]" />
-          )}
-          {query && !loadingFoods && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
-              aria-label="Clear search"
+        {/* Search + page size selector */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative max-w-md flex-1">
+            <svg
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+            </svg>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter by food name…"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-10 pr-10 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none transition-colors focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+            />
+            {loadingFoods && (
+              <span className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--brand)]" />
+            )}
+            {query && !loadingFoods && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
+                aria-label="Clear search"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Rows per page */}
+          <div className="flex shrink-0 items-center gap-2">
+            <label htmlFor="page-size" className="text-sm text-[var(--muted)]">Rows per page</label>
+            <select
+              id="page-size"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-colors focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Error */}
@@ -343,34 +381,81 @@ export default function FoodsPage() {
           </div>
         </div>
 
-        {/* Pagination */}
+        {/* Pagination bar */}
         {totalPages > 1 && (
-          <div className="mt-5 flex items-center justify-between">
+          <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
             <p className="text-sm text-[var(--muted)]">
               {startEntry.toLocaleString()}–{endEntry.toLocaleString()} of {totalCount.toLocaleString()}
             </p>
-            <div className="flex items-center gap-2">
+            {/* Page buttons */}
+            <div className="flex items-center gap-1">
+              {/* First page */}
               <button
+                onClick={() => setPage(0)}
+                disabled={page === 0}
+                aria-label="First page"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Previous page */}
+              <button
+              //<button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Previous page"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                Previous
               </button>
-              <span className="text-sm text-[var(--muted)]">
-                {page + 1} / {totalPages}
-              </span>
+              {/* Numbered page buttons */}
+              {pageNumbers.map((p, i) =>
+                p === null ? (
+                  <span key={`ellipsis-${i}`} className="flex h-8 w-8 items-center justify-center text-sm text-[var(--muted)]">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    aria-label={`Page ${p + 1}`}
+                    aria-current={p === page ? "page" : undefined}
+                    className={`flex h-8 min-w-[2rem] items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors ${
+                      p === page
+                        ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                        : "border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--card)]"
+                    }`}
+                  >
+                    {p + 1}
+                  </button>
+                )
+              )}
+
+              {/* Next page */}
               <button
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Next page"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Next
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              {/* Last page */}
+              <button
+                onClick={() => setPage(totalPages - 1)}
+                disabled={page >= totalPages - 1}
+                aria-label="Last page"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition-colors hover:bg-[var(--card)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
