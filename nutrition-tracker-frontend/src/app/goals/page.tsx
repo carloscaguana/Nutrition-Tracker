@@ -25,13 +25,27 @@ const GOAL_TYPES: { value: GoalType; label: string; description: string }[] = [
   { value: "other",       label: "Other",       description: "Custom goal" },
 ];
 
+/** Local-timezone date, not UTC. */
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function isActive(goal: GoalRow): boolean {
+/**
+ * The current goal is whichever goal has the most recent start_date on or
+ * before today. We compare by start_date only — end_date is not reliable
+ * for this check because Supabase can return the sentinel "9999-12-31" as a
+ * full timestamp string, breaking both equality and range comparisons.
+ */
+function currentGoalId(goals: GoalRow[]): number | null {
   const today = todayISO();
-  return goal.start_date <= today && goal.end_date >= today;
+  const started = goals.filter((g) => g.start_date.slice(0, 10) <= today);
+  if (started.length === 0) return null;
+  // goals are already ordered start_date DESC from getAllGoals, so first match wins
+  return started[0].goal_id;
 }
 
 function formatDate(iso: string): string {
@@ -49,10 +63,11 @@ function extractError(err: unknown): string {
 
 // ─── Empty form state ─────────────────────────────────────────────────────────
 
+// Sentinel used as end_date for the "current" goal — effectively means "no end"
+const OPEN_END = "9999-12-31";
+
 type FormState = {
   goal_type: GoalType;
-  start_date: string;
-  end_date: string;
   calorie_target: string;
   protein_target: string;
   carb_target: string;
@@ -60,13 +75,8 @@ type FormState = {
 };
 
 function emptyForm(): FormState {
-  const today = todayISO();
-  const oneYear = new Date();
-  oneYear.setFullYear(oneYear.getFullYear() + 1);
   return {
     goal_type: "maintenance",
-    start_date: today,
-    end_date: oneYear.toISOString().slice(0, 10),
     calorie_target: "",
     protein_target: "",
     carb_target: "",
@@ -77,8 +87,6 @@ function emptyForm(): FormState {
 function formFromGoal(g: GoalRow): FormState {
   return {
     goal_type: g.goal_type ?? "other",
-    start_date: g.start_date,
-    end_date: g.end_date,
     calorie_target: String(g.calorie_target),
     protein_target: g.protein_target !== null ? String(g.protein_target) : "",
     carb_target: g.carb_target !== null ? String(g.carb_target) : "",
@@ -129,29 +137,6 @@ function GoalForm({
               <span className="mt-0.5 text-xs text-[var(--muted)]">{description}</span>
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Date range */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Start date</label>
-          <input
-            type="date"
-            value={form.start_date}
-            onChange={(e) => set("start_date", e.target.value)}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-colors focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">End date</label>
-          <input
-            type="date"
-            value={form.end_date}
-            onChange={(e) => set("end_date", e.target.value)}
-            min={form.start_date}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-colors focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-          />
         </div>
       </div>
 
@@ -223,14 +208,16 @@ function GoalForm({
 
 function GoalCard({
   goal,
+  isCurrent,
   onEdit,
   onDelete,
 }: {
   goal: GoalRow;
+  isCurrent: boolean;
   onEdit: (g: GoalRow) => void;
   onDelete: (id: number) => void;
 }) {
-  const active = isActive(goal);
+  const active = isCurrent;
 
   return (
     <div className={`rounded-2xl border bg-[var(--card)] p-5 ${active ? "border-[var(--brand)]/50 ring-1 ring-[var(--brand)]/30" : "border-[var(--border)]"}`}>
@@ -270,7 +257,10 @@ function GoalCard({
 
       {/* Date range */}
       <p className="mb-4 text-xs text-[var(--muted)]">
-        {formatDate(goal.start_date)} — {formatDate(goal.end_date)}
+        Started {formatDate(goal.start_date)}
+        {isCurrent
+          ? <span className="ml-1.5 font-medium text-[var(--brand)]">· Current</span>
+          : ` — Ended ${formatDate(goal.end_date)}`}
       </p>
 
       {/* Targets grid */}
@@ -344,10 +334,8 @@ export default function GoalsPage() {
     setSaving(true);
     setFormError(null);
     try {
-      const payload = {
+      const macros = {
         goal_type: form.goal_type,
-        start_date: form.start_date,
-        end_date: form.end_date,
         calorie_target: Number(form.calorie_target),
         protein_target: form.protein_target ? Number(form.protein_target) : null,
         carb_target: form.carb_target ? Number(form.carb_target) : null,
@@ -355,14 +343,32 @@ export default function GoalsPage() {
       };
 
       if (formMode?.kind === "edit") {
-        await updateGoal(formMode.goal.goal_id, payload);
+        // Editing only changes targets — never touches dates
+        await updateGoal(formMode.goal.goal_id, macros);
         setGoals((prev) =>
           prev.map((g) =>
-            g.goal_id === formMode.goal.goal_id ? { ...g, ...payload } : g
+            g.goal_id === formMode.goal.goal_id ? { ...g, ...macros } : g
           )
         );
       } else {
-        const created = await insertGoal(payload);
+        // New goal: close any existing active goal by ending it yesterday,
+        // then insert the new one starting today as open-ended.
+        const today = todayISO();
+        const yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        const yesterdayISO = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, "0")}-${String(yest.getDate()).padStart(2, "0")}`;
+
+        const currentActive = goals.find((g) => g.goal_id === currentGoalId(goals));
+        if (currentActive) {
+          await updateGoal(currentActive.goal_id, { end_date: yesterdayISO });
+          setGoals((prev) =>
+            prev.map((g) =>
+              g.goal_id === currentActive.goal_id ? { ...g, end_date: yesterdayISO } : g
+            )
+          );
+        }
+
+        const created = await insertGoal({ ...macros, start_date: today, end_date: OPEN_END });
         setGoals((prev) => [created, ...prev]);
       }
       closeForm();
@@ -391,7 +397,7 @@ export default function GoalsPage() {
     );
   }
 
-  const activeGoal = goals.find(isActive);
+  const activeId = currentGoalId(goals);
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
@@ -414,7 +420,7 @@ export default function GoalsPage() {
             {!loading && (
               <p className="mt-1 text-sm text-[var(--muted)]">
                 {goals.length} goal{goals.length !== 1 ? "s" : ""}
-                {activeGoal ? " · 1 active" : " · none active"}
+                {activeId !== null ? " · 1 active" : " · none active"}
               </p>
             )}
           </div>
@@ -475,6 +481,7 @@ export default function GoalsPage() {
               <GoalCard
                 key={goal.goal_id}
                 goal={goal}
+                isCurrent={goal.goal_id === activeId}
                 onEdit={openEdit}
                 onDelete={handleDelete}
               />
