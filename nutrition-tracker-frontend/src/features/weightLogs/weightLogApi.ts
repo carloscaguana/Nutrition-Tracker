@@ -1,26 +1,44 @@
 import { supabase } from '@/lib/supabase'
-import { Database } from '@/types/database.types'
 
-type WeightLog = Database['public']['Tables']['weight_logs']['Row']
-type WeightLogInsert = Database['public']['Tables']['weight_logs']['Insert']
-
-// mirrors SELECT statement policy
-export const getWeightLogs = async (): Promise<WeightLog[]> => {
+export const getWeightLogs = async (userId: string) => {
   const { data, error } = await supabase
     .from('weight_logs')
     .select('*')
+    .eq('user_id', userId)
     .order('recorded_at', { ascending: false })
 
   if (error) throw error
   return data
 }
 
-//
-export const addWeightLog = async (log: WeightLogInsert) => {
+export const insertWeightLog = async (weight_kg: number, recorded_at: string) => {
   const { data, error } = await supabase
     .from('weight_logs')
-    .insert(log)
-  
+    .insert({ weight_kg, recorded_at })
+    .select()
+    .single()
+
   if (error) throw error
   return data
+}
+
+export const updateWeightLog = async (
+  weightlogId: number,
+  updates: { weight_kg?: number; recorded_at?: string }
+) => {
+  const { error } = await supabase
+    .from('weight_logs')
+    .update(updates)
+    .eq('weightlog_id', weightlogId)
+
+  if (error) throw error
+}
+
+export const deleteWeightLog = async (weightlogId: number) => {
+  const { error } = await supabase
+    .from('weight_logs')
+    .delete()
+    .eq('weightlog_id', weightlogId)
+
+  if (error) throw error
 }
