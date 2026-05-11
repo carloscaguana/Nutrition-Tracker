@@ -64,7 +64,7 @@ function extractError(err: unknown): string {
 // ─── Empty form state ─────────────────────────────────────────────────────────
 
 // Sentinel used as end_date for the "current" goal — effectively means "no end"
-const OPEN_END = "9999-12-31";
+const OPEN_END = "9999-01-01";
 
 type FormState = {
   goal_type: GoalType;

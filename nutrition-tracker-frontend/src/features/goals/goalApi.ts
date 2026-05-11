@@ -22,7 +22,7 @@ export const getActiveGoal = async (userId: string) => {
   // The active goal is the most recently *started* goal whose start_date is
   // on or before today. We deliberately do NOT filter on end_date because
   // the sentinel value "9999-12-31" can be returned by Supabase as a full
-  // timestamp string (e.g. "9999-12-31T00:00:00+00:00") which breaks equality
+  // timestamp string (e.g. "9999-01-01T00:00:00+00:00") which breaks equality
   // and range comparisons.
   const { data, error } = await supabase
   .from('goals')
