@@ -79,7 +79,7 @@ function getGreeting(user: User): string {
 
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
-const HISTORY_PREVIEW_LIMIT = 10;
+const HISTORY_PREVIEW_LIMIT = 4;
 
 function Dashboard({ user }: { user: User }) {
   const [meals, setMeals] = useState<MealWithItems[]>([]);
@@ -395,8 +395,16 @@ function Dashboard({ user }: { user: User }) {
 
         {/* ── Bottom stats ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <p className="mb-1 text-xs text-[var(--muted)]">Current weight</p>
+          <Link
+            href="/weight"
+            className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--brand)]/50"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs text-[var(--muted)]">Current weight</p>
+              <svg className="h-3.5 w-3.5 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
             {latestWeight ? (
               <>
                 <p className="text-2xl font-bold">
@@ -404,13 +412,18 @@ function Dashboard({ user }: { user: User }) {
                   <span className="ml-0.5 text-xs font-normal text-[var(--muted)]">kg</span>
                 </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  {new Date(latestWeight.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  {new Date(latestWeight.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  {" · "}
+                  {new Date(latestWeight.recorded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                 </p>
               </>
             ) : (
-              <p className="text-sm text-[var(--muted)]">No entries yet</p>
+              <>
+                <p className="text-sm text-[var(--muted)]">No entries yet</p>
+                <p className="mt-1 text-xs text-[var(--brand)]">+ Log weight</p>
+              </>
             )}
-          </div>
+          </Link>
           <Link
             href="/goals"
             className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--brand)]/50"
