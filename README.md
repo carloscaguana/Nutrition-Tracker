@@ -137,7 +137,7 @@ What it does:
 - Delete with a confirmation dialog
 - The dashboard "Current Weight" card is a clickable link to `/weight`, showing the most recent weight and full timestamp
 
-## Favorite Foods
+### Favorite Foods
 
 Let users save foods they eat regularly so they can find them quickly without searching every time.
 
